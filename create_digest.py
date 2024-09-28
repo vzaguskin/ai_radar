@@ -4,7 +4,7 @@ from  datetime import datetime, timezone
 from functools import reduce
 import yaml
 import os
-from telethon.tl.types import MessageEntityTextUrl
+from telethon.tl.types import MessageEntityTextUrl, MessageEntityUrl
 
 APPID = os.getenv("APPID")
 APPHASH = os.getenv("APPHASH")
@@ -38,13 +38,13 @@ class MessageCounter():
         self.cnt = Counter()
         self.props = {}
 
-    def insert(self, art_id, reactions_count, chan, message_date, message_id):
+    def insert(self, art_id, reactions_count, chan, message_date, message_id, message_summary):
         self.cnt[art_id] += reactions_count
         if not art_id in self.props:
-            self.props[art_id] = {"chan": chan, "date": message_date, "id": message_id}
+            self.props[art_id] = {"chan": chan, "date": message_date, "id": message_id, "message_summary": message_summary}
         else:
             if message.date < self.props[art_id]["date"]:
-                self.props[art_id] = {"chan": chan, "date": message.date, "id": message_id} 
+                self.props[art_id] = {"chan": chan, "date": message.date, "id": message_id, "message_summary": message_summary} 
     def get_top_posts(self, n):
         posts = self.cnt.most_common(n)
         out_posts = []
@@ -53,7 +53,8 @@ class MessageCounter():
             chan = self.props[art_id]["chan"]
             msg_id = self.props[art_id]["id"]
             msg_link = "/".join(["https://t.me", chan, str(msg_id)])
-            out_posts.append((art_link, chan, msg_link, reactions_count))
+            msg_summary = self.props[art_id]["message_summary"]
+            out_posts.append((art_link, chan, msg_link, reactions_count, msg_summary))
         return out_posts
 
 
@@ -67,10 +68,11 @@ with TelegramClient("anon", APPID, APPHASH) as client:
                 continue
             if not message.text:
                 continue
+            summary = message.text[:500] + "..."
             try:
                 reactions_count = reduce(lambda x, y: x + y.count, message.reactions.results, 0)
             except Exception as e:
-                print(e)
+                #print(e)
                 reactions_count = 0
             for url_entity, inner_text in message.get_entities_text(MessageEntityTextUrl):
                 url = url_entity.url
@@ -78,7 +80,14 @@ with TelegramClient("anon", APPID, APPHASH) as client:
                     art_id = url.split("/")[-1]
                     if TIME_INTERVAL in art_id:
                         print(chan, art_id, reactions_count)
-                        mc.insert(art_id=art_id, reactions_count=reactions_count, chan=chan, message_date=message.date, message_id = message.id)
+                        mc.insert(art_id=art_id, reactions_count=reactions_count, chan=chan, message_date=message.date, message_id = message.id, message_summary=summary)
+                
+            for url_entity, url in message.get_entities_text(MessageEntityUrl):
+                if "https://arxiv.org" in url:
+                    art_id = url.split("/")[-1]
+                    if TIME_INTERVAL in art_id:
+                        print(chan, art_id, reactions_count)
+                        mc.insert(art_id=art_id, reactions_count=reactions_count, chan=chan, message_date=message.date, message_id = message.id, message_summary=summary)
                 
 
 ymc = MessageCounter()
@@ -91,6 +100,7 @@ with TelegramClient("anon", APPID, APPHASH) as client:
                 continue
             if not message.text:
                 continue
+            summary = message.text[:300] + "..."
             try:
                 reactions_count = reduce(lambda x, y: x + y.count, message.reactions.results, 0)
             except Exception as e:
@@ -99,15 +109,17 @@ with TelegramClient("anon", APPID, APPHASH) as client:
             for url_entity, inner_text in message.get_entities_text(MessageEntityTextUrl):
                 url = url_entity.url
                 if url.startswith("https://youtu"):
-                    ymc.insert(art_id=url, reactions_count=reactions_count, chan=chan, message_date=message.date, message_id = message.id)
+                    ymc.insert(art_id=url, reactions_count=reactions_count, chan=chan, message_date=message.date, message_id = message.id, message_summary=summary)
 
                     
 tp = mc.get_top_posts(10)
-for p in tp:
-    print(p)
+for i, p in enumerate(tp, start =1):
+    art_url, nick, post_url, n_reacts, summary = p
+    print(f"{i}. {n_reacts} реакций: {nick} опубликовал пост {post_url} со ссылкой на статью {art_url}")
+    print(summary)
 
 tp = ymc.get_top_posts(10)
-for p in tp:
+for i, p in enumerate(tp, start =1):
     print(p)
 
 #TODO: 
