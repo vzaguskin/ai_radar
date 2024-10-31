@@ -12,10 +12,10 @@ APPHASH = os.getenv("APPHASH")
 with open('channels.yaml', 'r') as file:
     doc = list(yaml.safe_load_all(file))[0]
 
-start_date = datetime(2024, 9, 1).replace(tzinfo=timezone.utc)
-end_date = datetime(2024, 10, 1).replace(tzinfo=timezone.utc)
+start_date = datetime(2024, 10, 1).replace(tzinfo=timezone.utc)
+end_date = datetime(2024, 11, 1).replace(tzinfo=timezone.utc)
 
-TIME_INTERVAL = "2409"
+TIME_INTERVAL = "2410"
 SUMMARY_LEN = 500
 
 #http://www.thamnos.de/misc/look-up-bibliographical-information-from-an-arxiv-id/
@@ -47,14 +47,22 @@ class MessageCounter():
             if message.date < self.props[art_id]["date"]:
                 self.props[art_id] = {"chan": chan, "date": message.date, "id": message_id, "message_summary": message_summary} 
     def get_top_posts(self, n):
-        posts = self.cnt.most_common(n)
+        posts = self.cnt.most_common(None)
         out_posts = []
+        seen_msgs = set()
+        added = 0
         for art_id, reactions_count in posts:
             chan = self.props[art_id]["chan"]
             msg_id = self.props[art_id]["id"]
             msg_link = "/".join(["https://t.me", chan, str(msg_id)])
             msg_summary = self.props[art_id]["message_summary"]
-            out_posts.append((art_id, chan, msg_link, reactions_count, msg_summary))
+            if msg_id not in seen_msgs:
+                out_posts.append((art_id, chan, msg_link, reactions_count, msg_summary))
+                seen_msgs.add(msg_id)
+                added += 1
+                if added >= n:
+                    break
+            
         return out_posts
 
 
